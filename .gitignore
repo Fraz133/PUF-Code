@@ -1,0 +1,22 @@
+# Flutter
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+
+# Images (Large Data)
+01_Cloud_Backend/data/
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+pymongo
+python-multipart
+numpy
+opencv-python-headless
+scikit-image
+matplotlib
+scipy
+tqdm
