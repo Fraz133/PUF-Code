@@ -105,7 +105,6 @@ def verify_pmf_keys(extracted_grayscale, reference_grayscale, threshold=75.0):
         return False, 0.0
         
     # 1. Compare extracted vs actual enrolled reference
-    from pmf_engine import compare_pmf_direct
     _, overall_score = compare_pmf_direct(extracted_grayscale, reference_grayscale)
     
     # 2. Apply threshold
@@ -113,7 +112,7 @@ def verify_pmf_keys(extracted_grayscale, reference_grayscale, threshold=75.0):
     return passed, overall_score
 
 
-def identify_and_verify_tag(extracted_data, time_node, all_tags_reference_data, all_pmf_models, threshold=85.0):
+def identify_and_verify_tag(extracted_data, time_node, all_tags_reference_data, threshold=85.0):
     """
     Auto-detects which tag matches the extracted triple-key data.
     Attempts to find the best match across all registered tags.
@@ -128,17 +127,17 @@ def identify_and_verify_tag(extracted_data, time_node, all_tags_reference_data, 
     }
     
     for tag_id, tag_ref in all_tags_reference_data.items():
-        # 1. Binary Check
+        # 1. Binary Check (85% Threshold)
         ref_binary = tag_ref.get('binary_keys', {})
         b_passed, b_scores, b_overall = verify_binary_keys(
             extracted_data['binary_keys'], ref_binary, threshold
         )
         
-        # 2. M-ary Check
+        # 2. M-ary Check (85% Threshold)
         ref_mary = tag_ref.get('mary_key')
         m_passed, m_score = verify_mary_keys(extracted_data['mary_key'], ref_mary, threshold)
         
-        # 3. PMF Check (Using Direct Reference Grayscale)
+        # 3. PMF Check (75% Threshold for direct grayscale comparison)
         ref_grayscale = tag_ref.get('grayscale_ref', {})
         p_passed, p_score = verify_pmf_keys(extracted_data['grayscale_grids'], ref_grayscale, threshold=75.0)
         

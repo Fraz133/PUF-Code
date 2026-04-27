@@ -4,10 +4,10 @@ Database Module
 Handles MongoDB connection and all database operations.
 Stores and retrieves ALL THREE key types for PUF tag authentication:
 
-  1. Binary Keys  â€” 4Ã— 32x32 grids of 0/1
-  2. M-ary Key    â€” 1Ã— 32x32 grid of 0â€“15
-  3. PMF Params   â€” 4Ã— sets of (A, Ï„, C) parameter grids
-  4. Grayscale Ref â€” 4Ã— 32x32 grids of 0â€“255 intensity
+  1. Binary Keys  — 4× 30x30 grids of 0/1
+  2. M-ary Key    — 1× 30x30 grid of 0–15
+  3. PMF Params   — 4× sets of (A, τ, C) parameter grids
+  4. Grayscale Ref — 4× 30x30 grids of 0–255 intensity
 
 Database Structure:
     Database: puf_authentication_db
@@ -17,14 +17,14 @@ Database Structure:
         "puf_tag_id": "TAG-001",
         "time_node": 0.1,
         "binary_keys": {
-            "Blue_Cyan": [[0,1,0,...], ...],      # 32x32 grid
-            "Green": [[1,0,0,...], ...],           # 32x32 grid  
-            "Yellow_Orange": [[0,0,1,...], ...],   # 32x32 grid
-            "Red_Purple": [[1,1,0,...], ...],      # 32x32 grid
+            "Blue_Cyan": [[0,1,0,...], ...],      # 30x30 grid
+            "Green": [[1,0,0,...], ...],           # 30x30 grid  
+            "Yellow_Orange": [[0,0,1,...], ...],   # 30x30 grid
+            "Red_Purple": [[1,1,0,...], ...],      # 30x30 grid
         },
-        "mary_key": [[8,4,0,12,...], ...],         # 32x32 grid (0â€“15)
+        "mary_key": [[8,4,0,12,...], ...],         # 30x30 grid (0–15)
         "grayscale_ref": {
-            "Blue_Cyan": [[45.2, 120.5,...], ...], # 32x32 grid (0â€“255)
+            "Blue_Cyan": [[45.2, 120.5,...], ...], # 30x30 grid (0–255)
             ...
         },
         "enrollment_date": "2026-04-18",

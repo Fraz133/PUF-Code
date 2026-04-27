@@ -6,15 +6,19 @@ class ApiService {
   // Cloud URL for production authentication
   static const String baseUrl = 'http://212.28.191.52:8001';
 
-  /// Health check - is the server running?
-  static Future<bool> healthCheck() async {
+  /// Health check - is the server running and how many tags are registered?
+  static Future<Map<String, dynamic>> getHealthStatus() async {
     try {
       final response = await http.get(
-        Uri.parse(baseUrl), // No trailing slash
+        Uri.parse(baseUrl),
       ).timeout(const Duration(seconds: 5));
-      return response.statusCode == 200;
+      
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      }
+      return {'status': 'offline', 'registered_tags_count': 0};
     } catch (e) {
-      return false;
+      return {'status': 'offline', 'registered_tags_count': 0};
     }
   }
 

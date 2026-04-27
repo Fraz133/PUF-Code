@@ -16,6 +16,7 @@ class _HomeScreenState extends State<HomeScreen> {
   File? _selectedImage;
   bool _isLoading = false;
   bool _isServerOnline = false;
+  int _registeredTagCount = 0;
 
   final List<double> _timeSlots = [0.1, 1.0, 2.0, 3.0, 4.0];
 
@@ -27,13 +28,19 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _checkServer() async {
     try {
-      final online = await ApiService.healthCheck();
+      final health = await ApiService.getHealthStatus();
       if (mounted) {
-        setState(() => _isServerOnline = online);
+        setState(() {
+          _isServerOnline = health['status'] == 'online';
+          _registeredTagCount = health['registered_tags_count'] ?? 0;
+        });
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _isServerOnline = false);
+        setState(() {
+          _isServerOnline = false;
+          _registeredTagCount = 0;
+        });
       }
     }
   }
@@ -166,7 +173,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        _isServerOnline ? 'Server Online' : 'Server Offline',
+                        _isServerOnline 
+                          ? 'Server Online | $_registeredTagCount Tags' 
+                          : 'Server Offline',
                         style: TextStyle(
                           fontSize: 12,
                           color: _isServerOnline ? Colors.greenAccent : Colors.redAccent,

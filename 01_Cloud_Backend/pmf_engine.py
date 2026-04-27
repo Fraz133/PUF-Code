@@ -66,13 +66,13 @@ def fit_pmf_parameters(grayscale_grids_over_time, time_nodes):
       3. Take log: ln(I') = ln(A) - t/tau  -> linear regression for A and tau
     
     Args:
-        grayscale_grids_over_time: dict of channel_name -> list of 32x32 grids
+        grayscale_grids_over_time: dict of channel_name -> list of 30x30 grids
             e.g. { 'Blue_Cyan': [grid_t0, grid_t1, grid_t2, ...], ... }
         time_nodes: list of float time values
             e.g. [0.1, 1.5, 3.0, 4.5, 6.0]
     
     Returns:
-        dict: { 'Blue_Cyan': { 'A': 32x32, 'tau': 32x32, 'C': 32x32 }, ... }
+        dict: { 'Blue_Cyan': { 'A': 30x30, 'tau': 30x30, 'C': 30x30 }, ... }
     """
     time_array = np.array(time_nodes, dtype=np.float64)
     n_times = len(time_nodes)

@@ -157,7 +157,7 @@ def process_puf_image(image_path, grid_size=30, time_node=0.1):
     
     Args:
         image_path: Path to the PUF tag image (can be .png or .jpeg)
-        grid_size: Size of the key grids (default 32x32)
+        grid_size: Size of the key grids (default 30x30)
         time_node: Time in seconds after UV off (determines M-ary encoding base)
     
     Returns:

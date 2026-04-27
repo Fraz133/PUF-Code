@@ -23,9 +23,10 @@ from database import (
     get_available_time_nodes, 
     get_closest_time_node,
     get_all_tags_at_time,
+    get_all_registered_tags,
     log_authentication_attempt,
     get_pmf_params,
-    get_all_pmf_models
+    check_db_connection
 )
 from auth_logic import (
     verify_binary_keys, 
@@ -54,8 +55,33 @@ app.add_middleware(
 
 @app.get("/")
 async def root():
-    """Health check endpoint for the Flutter app."""
-    return {"status": "online"}
+    """Health check endpoint with database connectivity check."""
+    db_ok, db_msg = check_db_connection()
+    # Get tag count if DB is OK
+    tag_count = 0
+    if db_ok:
+        try:
+            from database import get_all_registered_tags
+            tag_count = len(get_all_registered_tags())
+        except:
+            pass
+            
+    return {
+        "status": "online" if db_ok else "degraded",
+        "database": db_msg,
+        "registered_tags_count": tag_count,
+        "version": "2.1.2"
+    }
+
+
+@app.get("/tags")
+async def list_tags():
+    """List all registered tags and their time nodes."""
+    try:
+        tags = get_all_registered_tags()
+        return {"registered_tags": tags}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 
 @app.post("/authenticate")
@@ -103,7 +129,7 @@ async def authenticate_puf(
         
         # PMF Verification (Actual)
         p_passed, p_score = verify_pmf_keys(
-            extracted_data['grayscale_grids'], time_node, pmf_params, threshold=threshold
+            extracted_data['grayscale_grids'], db_data.get('grayscale_ref'), threshold=75.0
         )
         
         auth_result = {
@@ -117,13 +143,15 @@ async def authenticate_puf(
     else:
         # Scenario B: Auto-Detect
         all_refs = get_all_tags_at_time(time_node)
-        all_pmf_models = get_all_pmf_models()
         
         if not all_refs:
-            raise HTTPException(status_code=404, detail="No registered tags found.")
+            raise HTTPException(
+                status_code=404, 
+                detail="No registered tags found on this server. Please ensure the enrollment script has been run on the server's database."
+            )
             
         final_tag_id, auth_result = identify_and_verify_tag(
-            extracted_data, time_node, all_refs, all_pmf_models, threshold=threshold
+            extracted_data, time_node, all_refs, threshold=threshold
         )
         final_matched_time = get_closest_time_node(final_tag_id, time_node)
     
