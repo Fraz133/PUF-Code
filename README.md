@@ -70,11 +70,4 @@ docker-compose up -d --build
 - **Multi-Channel Analysis**: Analyzes 4 distinct color channels simultaneously.
 - **Dynamic Thresholding**: Adapts to lighting conditions to minimize False Rejections.
 
----
 
-## 👥 Contributors
-- **Project Lead**: [Your Name]
-- **Academic Supervisor**: [Professor's Name]
-
----
-*Developed for the Advanced Research in Physical Cryptography and PUF Technologies.*
