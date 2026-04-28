@@ -1,6 +1,8 @@
 fastapi
 uvicorn
 pymongo
+dnspython
+requests
 python-multipart
 numpy
 opencv-python-headless

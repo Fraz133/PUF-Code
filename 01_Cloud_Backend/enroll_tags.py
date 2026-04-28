@@ -4,16 +4,19 @@ Enrollment Script
 Processes ALL tag images from the raw_images folder and stores their 
 complete key data (Binary + M-ary + Grayscale + PMF) into MongoDB.
 
-This is run ONCE to "register" the tag in the database.
-After this, the FastAPI server can verify any new uploaded image 
-using ALL THREE cryptographic key types.
+This script uses UPSERT logic — it safely updates existing data without
+destroying other tags. You can run it multiple times without data loss.
+
+Usage:
+    python enroll_tags.py              # Enroll/update TAG-001 (safe, no data loss)
+    python enroll_tags.py --clean      # Clear TAG-001 data first, then re-enroll
 
 Images available (same physical tag at different timestamps):
-    tag_00.jpeg -> t = 0.1s  (brightest, just after UV off)
-    tag_03.jpeg -> t = 1.5s
-    tag_04.jpeg -> t = 3.0s
-    tag_05.jpeg -> t = 4.5s
-    tag_07.jpeg -> t = 6.0s  (dimmest, mostly blue remaining)
+    1 (2).jpg -> t = 0.1s  (brightest, just after UV off)
+    1 (3).jpg -> t = 1.0s
+    1 (4).jpg -> t = 2.0s
+    1 (5).jpg -> t = 3.0s
+    1 (6).jpg -> t = 4.0s  (dimmest, mostly blue remaining)
 """
 
 import os
@@ -28,7 +31,8 @@ from database import (
     store_tag_data, 
     store_pmf_params,
     get_all_registered_tags, 
-    clear_all_data
+    clear_tag_data,
+    check_db_connection
 )
 
 # ============================================================
@@ -50,25 +54,44 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 RAW_IMAGES_DIR = os.path.join(BASE_DIR, "data")
 
 
-def enroll_tag():
+def enroll_tag(clean=False):
     """
     Process all tag images and store their complete key data in MongoDB.
     Also fits the PMF decay curves across all time nodes.
+    
+    Uses UPSERT logic — safe to run multiple times.
+    Existing data for OTHER tags is never touched.
+    
+    Args:
+        clean: If True, clear existing data for this tag before enrolling.
     """
     print("=" * 60)
     print("  PUF TAG ENROLLMENT (Triple-Key System)")
     print("  Registering Binary Keys + M-ary Key + PMF Model")
     print("=" * 60)
     
+    # Verify database connection FIRST before doing anything
+    db_ok, db_msg = check_db_connection()
+    if not db_ok:
+        print(f"\n[FATAL] Cannot connect to database: {db_msg}")
+        print("[FATAL] Enrollment aborted — no data was modified.")
+        return
+    print(f"\n[DB] {db_msg}")
+    
     raw_dir = os.path.abspath(RAW_IMAGES_DIR)
-    print(f"\n[DIR] Looking for images in: {raw_dir}")
+    print(f"[DIR] Looking for images in: {raw_dir}")
     
     if not os.path.exists(raw_dir):
         print(f"[ERROR] Directory not found: {raw_dir}")
+        print("[ERROR] Enrollment aborted — no data was modified.")
         return
     
-    # Clear old data for clean enrollment
-    clear_all_data()
+    # Only clear data for THIS specific tag if --clean flag is used
+    if clean:
+        print(f"\n[CLEAN] Clearing existing data for {TAG_ID} only...")
+        clear_tag_data(TAG_ID)
+    else:
+        print(f"\n[SAFE] Using UPSERT mode — existing data will be updated, not deleted.")
     
     enrolled_count = 0
     time_nodes = []
@@ -98,7 +121,7 @@ def enroll_tag():
             mary_key = result['mary_key']
             grayscale_grids = result['grayscale_grids']
             
-            # Store in MongoDB (Binary Keys + M-ary Key + Grayscale Reference)
+            # Store in MongoDB using UPSERT (Binary Keys + M-ary Key + Grayscale Reference)
             store_tag_data(
                 tag_id=TAG_ID,
                 time_node=time_node,
@@ -147,10 +170,16 @@ def enroll_tag():
     # Verify what's in the database
     print(f"\n[DB] Database Summary:")
     tags = get_all_registered_tags()
-    for tag in tags:
-        print(f"  {tag['_id']}: {tag['count']} time nodes â†’ {sorted(tag['time_nodes'])}")
+    if tags:
+        for tag in tags:
+            print(f"  {tag['_id']}: {tag['count']} time nodes → {sorted(tag['time_nodes'])}")
+    else:
+        print("  [!] WARNING: No tags found after enrollment! Check for errors above.")
 
 
 if __name__ == "__main__":
-    enroll_tag()
-
+    # Check for --clean flag
+    clean_mode = "--clean" in sys.argv
+    if clean_mode:
+        print("[MODE] Running in CLEAN mode — will clear existing tag data first")
+    enroll_tag(clean=clean_mode)

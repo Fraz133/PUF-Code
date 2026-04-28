@@ -44,15 +44,40 @@ Database Structure:
 """
 
 from pymongo import MongoClient
+from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError
 from datetime import datetime
 import numpy as np
-
 import os
+import time
 
-# Database Connection Logic
-# Locally, it uses localhost. In Docker/Cloud, it uses the MONGO_URL environment variable.
+# ============================================================
+# DATABASE CONNECTION (supports both Atlas and local MongoDB)
+# ============================================================
+# Priority: MONGO_URL env var > default local MongoDB
+# For Atlas: set MONGO_URL=mongodb+srv://user:pass@cluster.mongodb.net/
+# For local: set MONGO_URL=mongodb://localhost:27017/  (or leave unset)
 mongo_url = os.environ.get('MONGO_URL', 'mongodb://localhost:27017/')
-client = MongoClient(mongo_url)
+
+# Connection settings with automatic reconnection
+client = MongoClient(
+    mongo_url,
+    serverSelectionTimeoutMS=5000,       # 5s timeout for server selection
+    connectTimeoutMS=10000,              # 10s timeout for initial connection
+    socketTimeoutMS=20000,               # 20s timeout for socket operations
+    retryWrites=True,                    # Auto-retry failed writes
+    retryReads=True,                     # Auto-retry failed reads
+)
+
+# Log which database we're connecting to (mask password for security)
+_safe_url = mongo_url
+if '@' in _safe_url:
+    # Mask password: mongodb+srv://user:****@cluster...
+    prefix = _safe_url.split('://')[0]
+    rest = _safe_url.split('://')[1]
+    user_part = rest.split('@')[0].split(':')[0]
+    host_part = rest.split('@')[1]
+    _safe_url = f"{prefix}://{user_part}:****@{host_part}"
+print(f"[DB] Connecting to: {_safe_url}")
 
 # Create (or connect to) our project database
 db = client['puf_authentication_db']
@@ -62,14 +87,30 @@ tags_collection = db['registered_tags']
 pmf_collection = db['pmf_models']
 logs_collection = db['authentication_logs']
 
+# Create indexes for fast lookups (idempotent — safe to call multiple times)
+try:
+    tags_collection.create_index([("puf_tag_id", 1), ("time_node", 1)])
+    pmf_collection.create_index([("puf_tag_id", 1)])
+    logs_collection.create_index([("timestamp", -1)])
+except Exception as e:
+    print(f"[DB] Warning: Could not create indexes: {e}")
+
+
 def check_db_connection():
-    """Checks if the MongoDB server is reachable."""
-    try:
-        # The admin.command("ping") is the fastest way to check connection
-        client.admin.command('ping')
-        return True, "Connected to MongoDB"
-    except Exception as e:
-        return False, f"Database Error: {str(e)}"
+    """Checks if the MongoDB server is reachable with retry logic."""
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            client.admin.command('ping')
+            return True, "Connected to MongoDB"
+        except (ConnectionFailure, ServerSelectionTimeoutError) as e:
+            if attempt < max_retries - 1:
+                print(f"[DB] Connection attempt {attempt + 1} failed, retrying in 2s...")
+                time.sleep(2)
+            else:
+                return False, f"Database Error after {max_retries} attempts: {str(e)}"
+        except Exception as e:
+            return False, f"Database Error: {str(e)}"
 
 
 # ============================================================
@@ -78,13 +119,15 @@ def check_db_connection():
 def store_tag_data(tag_id, time_node, binary_keys, mary_key, grayscale_grids, source_image="unknown"):
     """
     Store ALL key types for a specific tag at a specific time node.
+    Uses UPSERT logic — safely replaces existing data for this tag+time_node
+    without affecting other tags or time nodes.
     
     Args:
         tag_id: e.g. "TAG-001"
         time_node: e.g. 0.1 (seconds after UV excitation)
         binary_keys: dict of 4 numpy arrays (32x32 each, 0/1)
-        mary_key: numpy array (32x32, 0â€“15)
-        grayscale_grids: dict of 4 numpy arrays (32x32 each, 0â€“255)
+        mary_key: numpy array (32x32, 0–15)
+        grayscale_grids: dict of 4 numpy arrays (32x32 each, 0–255)
         source_image: filename of the original image
     """
     # Convert numpy arrays to regular Python lists for MongoDB storage
@@ -106,21 +149,23 @@ def store_tag_data(tag_id, time_node, binary_keys, mary_key, grayscale_grids, so
         "source_image": source_image
     }
     
-    # Remove old entry for same tag+time_node if it exists (upsert)
-    tags_collection.delete_many({
-        "puf_tag_id": tag_id, 
-        "time_node": time_node
-    })
+    # UPSERT: Replace only this specific tag+time_node entry
+    result = tags_collection.replace_one(
+        {"puf_tag_id": tag_id, "time_node": time_node},
+        document,
+        upsert=True
+    )
     
-    result = tags_collection.insert_one(document)
-    print(f"  [DB] Stored {tag_id} at t={time_node}s â†’ MongoDB ID: {result.inserted_id}")
-    return result.inserted_id
+    action = "Updated" if result.matched_count > 0 else "Inserted"
+    print(f"  [DB] {action} {tag_id} at t={time_node}s")
+    return result.upserted_id or "updated"
 
 
 def store_pmf_params(tag_id, pmf_params):
     """
     Store the fitted PMF decay parameters for a tag.
     These are tag-wide (not per time-node), since they model the decay ACROSS all times.
+    Uses UPSERT — safely replaces existing PMF model for this tag only.
     
     Args:
         tag_id: e.g. "TAG-001"
@@ -134,18 +179,22 @@ def store_pmf_params(tag_id, pmf_params):
             'C': params['C'].tolist()
         }
     
-    # Remove old PMF model for this tag
-    pmf_collection.delete_many({"puf_tag_id": tag_id})
-    
     document = {
         "puf_tag_id": tag_id,
         "pmf_params": params_as_lists,
         "fitted_date": datetime.now().isoformat()
     }
     
-    result = pmf_collection.insert_one(document)
-    print(f"  [DB] Stored PMF model for {tag_id} â†’ MongoDB ID: {result.inserted_id}")
-    return result.inserted_id
+    # UPSERT: Replace only this specific tag's PMF model
+    result = pmf_collection.replace_one(
+        {"puf_tag_id": tag_id},
+        document,
+        upsert=True
+    )
+    
+    action = "Updated" if result.matched_count > 0 else "Inserted"
+    print(f"  [DB] {action} PMF model for {tag_id}")
+    return result.upserted_id or "updated"
 
 
 # ============================================================
@@ -281,15 +330,24 @@ def clear_all_data():
     print("[WARNING] All database data cleared.")
 
 
+def clear_tag_data(tag_id):
+    """Clear data for a SPECIFIC tag only. Much safer than clear_all_data()."""
+    t_result = tags_collection.delete_many({"puf_tag_id": tag_id})
+    p_result = pmf_collection.delete_many({"puf_tag_id": tag_id})
+    print(f"[DB] Cleared {t_result.deleted_count} time-node entries and {p_result.deleted_count} PMF models for {tag_id}")
+
+
 if __name__ == "__main__":
     print("Database module loaded successfully.")
-    print(f"Connected to: mongodb://localhost:27017/puf_authentication_db")
+    print(f"Connected to: {_safe_url}")
+    
+    ok, msg = check_db_connection()
+    print(f"Connection status: {msg}")
     
     tags = get_all_registered_tags()
     if tags:
         print(f"\nRegistered tags:")
         for tag in tags:
-            print(f"  {tag['_id']}: {tag['count']} time nodes â†’ {sorted(tag['time_nodes'])}")
+            print(f"  {tag['_id']}: {tag['count']} time nodes → {sorted(tag['time_nodes'])}")
     else:
         print("\nNo tags registered yet. Run enroll_tags.py to register.")
-

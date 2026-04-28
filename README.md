@@ -53,7 +53,7 @@ To achieve maximum security, the system verifies three distinct "Keys" extracted
 ### Backend Deployment
 ```bash
 # Clone the repository
-git clone https://github.com/YOUR_USERNAME/TDM-PUF-Project.git
+git clone https://github.com/Fraz133/TDM-PUF-Project.git
 
 # Deploy using Docker
 cd 01_Cloud_Backend
@@ -69,5 +69,8 @@ docker-compose up -d --build
 - **Time-Node Rejection**: Rejects genuine images if the wrong time slot is selected (Protection against playback attacks).
 - **Multi-Channel Analysis**: Analyzes 4 distinct color channels simultaneously.
 - **Dynamic Thresholding**: Adapts to lighting conditions to minimize False Rejections.
+
+
+
 
 
